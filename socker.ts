@@ -21,11 +21,9 @@ const io = new Server(server, {
 
 type RoomT =
   | {
-      roomName: { message: string }[];
+      [key: string]: { message: string }[];
     }
-  | null
-  | undefined;
-
+  | {};
 
 async function writeMessagesToRoom(msg: string, room: string, roomData: RoomT) {
   const options = {
@@ -66,8 +64,17 @@ async function readAllMessages() {
   try {
     const file = await readFile("messages.json", { flag: "r" });
     const content = JSON.parse(file.toString());
-    console.log("coontent ", content);
     return content;
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+async function readAllMessagesOfRoom(room: string) {
+  try {
+    const file = await readFile("messages.json", { flag: "r" });
+    const messages = JSON.parse(file.toString());
+    return messages[room];
   } catch (error) {
     console.log(error);
   }
@@ -75,14 +82,13 @@ async function readAllMessages() {
 
 io.on("connection", (socket) => {
   socket.on("join room", async (room) => {
-    const data: RoomT = await readAllMessages();
     socket.join(room);
-    if (data && !Object.keys(data).length) {
+    const messages: RoomT = await readAllMessages();
+    if (!Object.keys(messages[room] || {}).length) {
       socket.emit("join", []);
     } else {
-      if (data) {
-        socket.emit("join", data[room]);
-      }
+      console.log(messages[room]);
+      socket.emit("join", messages[room]);
     }
   });
 
@@ -95,8 +101,8 @@ io.on("connection", (socket) => {
     } catch (error) {
       console.log(error);
     }
-
-    io.to(roomName).emit("foward message", message);
+    const uniqueMessages = await readAllMessagesOfRoom(roomName);
+    io.to(roomName).emit("foward message", uniqueMessages);
   });
 
   socket.on("disconnect", () => {
