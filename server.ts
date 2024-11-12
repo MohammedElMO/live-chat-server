@@ -81,34 +81,59 @@ async function readAllMessagesOfRoom(room: string) {
 }
 
 io.on("connection", (socket) => {
-  socket.on("join room", async (room) => {
-    socket.join(room);
-    const messages: RoomT = await readAllMessages();
-    if (!Object.keys(messages[room] || {}).length) {
-      socket.emit("join", []);
-    } else {
-      console.log(messages[room]);
-      socket.emit("join", messages[room]);
-    }
+  console.log("User connected", socket.id);
+
+  socket.on("room:join", (roomName) => {
+    console.log("joined");
+    const currentRoom = Array.from(socket.rooms)[0];
+    console.log(currentRoom); // this is a hash
+        if (currentRoom && currentRoom !== roomName) {
+          socket.leave(roomName);
+        }
+    socket.join(roomName);
+    console.log(socket.handshake.auth, "joined", roomName);
   });
 
-  socket.on("sent message", async (message, roomName) => {
-    try {
-      const file = await readFile("messages.json", { flag: "r" });
-      const content = JSON.parse(file.toString());
-      console.log("coontent ", content);
-      await writeMessagesToRoom(message, roomName, content);
-    } catch (error) {
-      console.log(error);
-    }
-    const uniqueMessages = await readAllMessagesOfRoom(roomName);
-    io.to(roomName).emit("foward message", uniqueMessages);
+  socket.on("room:message", async (message) => {
+    const currentRoom = Array.from(socket.rooms)[0];
+
+    console.log({ message, currentRoom });
+
+    socket.to(currentRoom).emit("room:chat", message);
   });
+
+  socket.on("room:leave", (room) => {
+    console.log(socket.handshake.auth, "leave", room);
+
+    socket.leave(room);
+  });
+  console.log(socket.handshake.auth);
+
+  //   socket.on("join room", async (room) => {
+  //     socket.join(room);
+  //     const messages: RoomT = await readAllMessages();
+  //     if (!Object.keys(messages[room] || {}).length) {
+  //       socket.emit("joined", []);
+  //     } else {
+  //       socket.emit("joined", messages[room]);
+  //     }
+  //   });
+
+  //   socket.on("sent message", async (message, roomName) => {
+  //     try {
+  //       const file = await readFile("messages.json", { flag: "r" });
+  //       const content = JSON.parse(file.toString());
+  //       await writeMessagesToRoom(message, roomName, content);
+  //     } catch (error) {
+  //       console.log(error);
+  //     }
+  //     const uniqueMessages = await readAllMessagesOfRoom(roomName);
+  //     io.to(roomName).emit("forward message", uniqueMessages);
+  //   });
 
   socket.on("disconnect", () => {
-    console.log("bye");
+    console.log("bye user", socket.id);
   });
-  console.log("we have new user");
 });
 
 server.listen(4000, () => console.log("serving messges..."));
