@@ -2,13 +2,8 @@ import express from "express";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
 import { readFile, writeFile } from "node:fs/promises";
-const app = express();
 
-// app.use(
-//   cors({
-//     origin: "*",
-//   })
-// );
+const app = express();
 
 const server = createServer(app);
 
@@ -83,23 +78,30 @@ async function readAllMessagesOfRoom(room: string) {
 io.on("connection", (socket) => {
   console.log("User connected", socket.id);
 
-  socket.on("room:join", (roomName) => {
-    console.log("joined");
-    const currentRoom = Array.from(socket.rooms)[0];
-    console.log(currentRoom); // this is a hash
-        if (currentRoom && currentRoom !== roomName) {
-          socket.leave(roomName);
-        }
+  socket.on("room:join", async (roomName) => {
     socket.join(roomName);
+
     console.log(socket.handshake.auth, "joined", roomName);
+
+    const roomMessages = await readAllMessagesOfRoom(roomName);
+    io.to(roomName).emit("room:chat", roomMessages);
   });
 
-  socket.on("room:message", async (message) => {
-    const currentRoom = Array.from(socket.rooms)[0];
+  socket.on("room:message", async (message, room) => {
+    const rooms = Array.from(socket.rooms);
+    console.log(rooms);
+    if (!rooms.includes(room)) {
+      socket.emit("error", {
+        message: ` "${socket.id} cannot send to this channel until you join " ${room}`,
+      });
+      return;
+    }
 
-    console.log({ message, currentRoom });
-
-    socket.to(currentRoom).emit("room:chat", message);
+    const allMessages = await readAllMessages();
+    await writeMessagesToRoom(message, room, allMessages);
+    const roomMessages = await readAllMessagesOfRoom(room);
+    console.log(roomMessages);
+    io.to(room).emit("room:chat", roomMessages);
   });
 
   socket.on("room:leave", (room) => {
@@ -107,29 +109,6 @@ io.on("connection", (socket) => {
 
     socket.leave(room);
   });
-  console.log(socket.handshake.auth);
-
-  //   socket.on("join room", async (room) => {
-  //     socket.join(room);
-  //     const messages: RoomT = await readAllMessages();
-  //     if (!Object.keys(messages[room] || {}).length) {
-  //       socket.emit("joined", []);
-  //     } else {
-  //       socket.emit("joined", messages[room]);
-  //     }
-  //   });
-
-  //   socket.on("sent message", async (message, roomName) => {
-  //     try {
-  //       const file = await readFile("messages.json", { flag: "r" });
-  //       const content = JSON.parse(file.toString());
-  //       await writeMessagesToRoom(message, roomName, content);
-  //     } catch (error) {
-  //       console.log(error);
-  //     }
-  //     const uniqueMessages = await readAllMessagesOfRoom(roomName);
-  //     io.to(roomName).emit("forward message", uniqueMessages);
-  //   });
 
   socket.on("disconnect", () => {
     console.log("bye user", socket.id);
